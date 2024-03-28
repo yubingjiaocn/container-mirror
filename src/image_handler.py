@@ -6,6 +6,7 @@ from config import (IMAGES_DENIED_LIST, IMAGES_FAILED_LIST, IMAGES_IGNORE_LIST,
                     IMAGES_LIST, IMAGES_LIST_TEMPLATE, IMAGES_MIRRORED_LIST)
 from ecr import create_ecr_repo, delete_ecr_repo, login_ecr, login_ecr_cn
 from utils import in_array, is_ecr, replace_domain_name
+from subprocess import CalledProcessError
 
 def image_handler():
     """Main function to mirror container images"""
@@ -79,16 +80,20 @@ def copy(src_img: str, dest_repo: str, dest_cred: str) -> bool:
 
         tag = src_img.split(':')[-1]
         dest_img = f"{dest_repo}:{tag}"
-
         dest_param = f"--dest-creds={dest_cred}"
-
-        copy_cmd = ["skopeo", "copy", src_param, dest_param, f"docker://{src_img}", f"docker://{dest_img}"]
 
         logging.info(f"Image {src_img} will be copied to {dest_img}")
 
-        result = subprocess.run(copy_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            copy_cmd = ["skopeo", "copy", "--multi-arch", "all", src_param, dest_param, f"docker://{src_img}", f"docker://{dest_img}"]
+            result = subprocess.run(copy_cmd, capture_output=True, text=True, check=True)
+        except CalledProcessError as e:
+            logging.error(f"Error copying image {src_img}: {e}")
+            logging.error(f"{e.stdout}")
+            logging.error(f"{e.stderr}")
+            return False
 
-        return result
+        return result.returncode
 
     except Exception as e:
         logging.error(f"Error copying image {src_img}: {e}")
