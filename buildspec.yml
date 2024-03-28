@@ -14,6 +14,7 @@ phases:
     commands:
       - pip install -r src/requirements.txt
       - wget https://github.com/lework/skopeo-binary/releases/latest/download/skopeo-linux-amd64 && chmod +x skopeo-linux-amd64 && mv skopeo-linux-amd64 /usr/bin/skopeo
+      - curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
   build:
     commands:
