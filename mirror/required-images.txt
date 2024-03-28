@@ -10,4 +10,9 @@
 # 此行以及以上内容请勿删除。新images在此行下添加。提交新的images时，请删除旧的images
 # === Image request starts here ===
 
+600413481647.dkr.ecr.us-west-2.amazonaws.com/queue-agent:20240314
+docker.io/library/hello-world:latest
 busybox
+registry.k8s.io/cluster-autoscaler:v1.3.9
+ghcr.io/homebrew/core/crane:0.19.1
+public.ecr.aws/amazonlinux/amazonlinux:2023-minimal

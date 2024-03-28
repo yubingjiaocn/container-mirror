@@ -18,7 +18,9 @@ DOMAIN_MAP = {
     "k8s.gcr.io": "gcr/google_containers",
     "public.ecr.aws": "amazonecr",
     "docker.io": "dockerhub",
-    "nvcr.io": "nvcr"
+    "nvcr.io": "nvcr",
+    "registry.k8s.io": "k8s",
+    "ghcr.io": "ghcr"
 }
 
 PWD = Path(os.path.dirname(os.path.realpath(__file__))).parent.absolute()

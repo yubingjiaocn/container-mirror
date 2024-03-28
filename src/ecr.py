@@ -2,7 +2,6 @@ import base64
 import logging
 
 import boto3
-import docker
 from botocore.exceptions import ClientError
 
 from config import (AWS_CN_AK, AWS_CN_SK, ECR_DOMAIN_CN, ECR_REGION_CN,
@@ -12,9 +11,7 @@ ecr_client_cn = boto3.client('ecr', region_name=ECR_REGION_CN,
                                  aws_access_key_id=AWS_CN_AK,
                                 aws_secret_access_key=AWS_CN_SK)
 
-docker_client = docker.from_env()
-
-def login_ecr(img: str) -> bool:
+def login_ecr(img: str) -> str:
     """Authenticate with AWS ECR."""
     try:
         registry = img.split('/')[0]
@@ -24,35 +21,19 @@ def login_ecr(img: str) -> bool:
         ecr_client = boto3.client('ecr', region_name=img_region)
 
         ecr_auth = ecr_client.get_authorization_token()
-        username, password = base64.b64decode(ecr_auth["authorizationData"][0]['authorizationToken']).decode().split(':')
+        cred = base64.b64decode(ecr_auth["authorizationData"][0]['authorizationToken']).decode()
 
-        docker_client.login(
-            registry=registry,
-            username=username,
-            password=password,
-            reauth=True
-        )
-
-        logging.info(f"Logged in to {registry}.")
-        return True
+        return cred
 
     except Exception as e:
         logging.error(f"Error logging in to ECR: {e}")
 
-def login_ecr_cn():
+def login_ecr_cn() -> str:
     """Authenticate with AWS ECR CN for pushing image."""
     try:
         ecr_auth_cn = ecr_client_cn.get_authorization_token()["authorizationData"][0]['authorizationToken']
-        username, password = base64.b64decode(ecr_auth_cn).decode().split(':')
-
-        logging.info(f"Logging in to {ECR_DOMAIN_CN}...")
-        docker_client.login(
-            registry=ECR_DOMAIN_CN,
-            username=username,
-            password=password
-        )
-        logging.info(f"Logged in to {ECR_DOMAIN_CN}.")
-        return True
+        cred = base64.b64decode(ecr_auth_cn).decode()
+        return cred
     except Exception as e:
         logging.error(f"Error logging in to ECR: {e}")
         raise RuntimeError

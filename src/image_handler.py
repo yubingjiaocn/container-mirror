@@ -1,18 +1,16 @@
 import logging
 import shutil
-
-import docker
+import subprocess
 
 from config import (IMAGES_DENIED_LIST, IMAGES_FAILED_LIST, IMAGES_IGNORE_LIST,
                     IMAGES_LIST, IMAGES_LIST_TEMPLATE, IMAGES_MIRRORED_LIST)
-from ecr import create_ecr_repo, delete_ecr_repo, login_ecr
+from ecr import create_ecr_repo, delete_ecr_repo, login_ecr, login_ecr_cn
 from utils import in_array, is_ecr, replace_domain_name
-
-docker_client = docker.from_env()
 
 def image_handler():
     """Main function to mirror container images"""
     try:
+        ecr_cred_cn = login_ecr_cn()
         images = []
         proceed_images = []
         failed_images = []
@@ -48,7 +46,7 @@ def image_handler():
             uri_cn = create_ecr_repo(repo_cn)
 
             if uri_cn != None:
-                if (pull_and_push(img, uri_cn)):
+                if (copy(img, uri_cn, ecr_cred_cn)):
                     proceed_images.append(img)
                     logging.info(f"Complete mirroring of image: {img}")
                 else:
@@ -69,28 +67,29 @@ def image_handler():
     except FileNotFoundError as e:
         logging.error(f"Error: {e}")
 
-def pull_and_push(orig_img: str, target_repo: str) -> bool:
+def copy(src_img: str, dest_repo: str, dest_cred: str) -> bool:
     """Pull an image from a public repository and push it to ECR in CN region."""
     try:
-        if is_ecr(orig_img):
-            logging.info(f"Image {orig_img} is from ECR, logging in...")
-            login_ecr(orig_img)
+        if is_ecr(src_img):
+            logging.info(f"Image {src_img} is from ECR, logging in...")
+            src_cred = login_ecr(src_img)
+            src_param = f"--src-creds={src_cred}"
+        else:
+            src_param = "--src-no-creds"
 
-        logging.info(f"Pulling image: {orig_img}")
-        docker_client.images.pull(orig_img)
+        tag = src_img.split(':')[-1]
+        dest_img = f"{dest_repo}:{tag}"
 
-        tag = orig_img.split(':')[-1]
+        dest_param = f"--dest-creds={dest_cred}"
 
-        target_img = f"{target_repo}:{tag}"
-        logging.info(f"Tagging {orig_img} as {target_img}")
-        docker_client.images.get(orig_img).tag(target_img)
+        copy_cmd = ["skopeo", "copy", src_param, dest_param, f"docker://{src_img}", f"docker://{dest_img}"]
 
-        logging.info(f"Pushing image: {target_img}")
-        docker_client.images.push(target_img)
-        logging.info(f"Pushed image: {target_img}")
+        logging.info(f"Image {src_img} will be copied to {dest_img}")
 
-        return True
+        result = subprocess.run(copy_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    except docker.errors.APIError as e:
-        logging.error(f"Error pulling or pushing image {orig_img}: {e}")
+        return result
+
+    except Exception as e:
+        logging.error(f"Error copying image {src_img}: {e}")
         return False
