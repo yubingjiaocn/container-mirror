@@ -9,9 +9,12 @@ phases:
   install:
     runtime-versions:
         python: 3.10
+
   pre_build:
     commands:
       - pip install -r src/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+      - chmod +x bin/skopeo-linux-amd64 && mv bin/skopeo-linux-amd64 /usr/bin/skopeo
+
   build:
     commands:
       - python src/main.py
