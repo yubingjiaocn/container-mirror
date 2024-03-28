@@ -1,0 +1,10 @@
+# Steps to add Helm charts:
+# 1. Check mirrored-charts.txt for mirrored charts list.
+# 2. If you can't find your Helm chart in mirrored-charts.txt, please add the repository below.
+# 3. Once the chart mirror is proceed, the repository will be automatically deleted.
+
+# Example
+# https://aws-samples.github.io/stable-diffusion-on-eks/charts/
+# https://aws.github.io/eks-charts
+# 此行以及以上内容请勿删除。新Helm repo在此行下添加。提交新的Helm repo时，请删除旧的Helm repo
+# === Helm repo request starts here ===

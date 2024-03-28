@@ -29,13 +29,13 @@ PWD = Path(os.path.dirname(os.path.realpath(__file__))).parent.absolute()
 IMAGES_DENIED_LIST = f'{PWD}/mirror/denied-images.txt'
 IMAGES_IGNORE_LIST = f'{PWD}/mirror/ignore-images.txt'
 IMAGES_LIST = f'{PWD}/mirror/required-images.txt'
-IMAGES_LIST_TEMPLATE= f'{PWD}/src/required-images.txt.template'
+IMAGES_LIST_TEMPLATE= f'{PWD}/src/resources/required-images.txt.template'
 IMAGES_MIRRORED_LIST = f'{PWD}/mirror/mirrored-images.txt'
 IMAGES_FAILED_LIST = f'{PWD}/mirror/failed-images.txt'
-POLICY_FILE = f'{PWD}/mirror/policy.json'
+POLICY_FILE = f'{PWD}/src/resources/policy.json'
 
 CHARTS_LIST = f'{PWD}/mirror/required-charts.txt'
-CHARTS_LIST_TEMPLATE= f'{PWD}/bin/required-charts.txt.template'
+CHARTS_LIST_TEMPLATE= f'{PWD}/src/resources/required-charts.txt.template'
 CHARTS_MIRRORED_LIST = f'{PWD}/mirror/mirrored-charts.txt'
 CHARTS_FAILED_LIST = f'{PWD}/mirror/failed-charts.txt'
 

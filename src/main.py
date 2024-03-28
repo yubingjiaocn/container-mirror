@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 
 def main():
     image_handler()
-    # chart_handler()
+    chart_handler()
 
 if __name__ == "__main__":
     main()

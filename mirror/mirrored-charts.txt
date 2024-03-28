@@ -1,0 +1,3 @@
+834204282212.dkr.ecr.cn-northwest-1.amazonaws.com.cn/charts/stable-diffusion-on-eks/charts/sd-on-eks:1.0.0
+834204282212.dkr.ecr.cn-northwest-1.amazonaws.com.cn/charts/stable-diffusion-on-eks/charts/sd-on-eks:0.1.1
+834204282212.dkr.ecr.cn-northwest-1.amazonaws.com.cn/charts/stable-diffusion-on-eks/charts/sd-on-eks:0.1.0
