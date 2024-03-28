@@ -1,0 +1,4 @@
+600413481647.dkr.ecr.us-west-2.amazonaws.com/queue-agent:20240314
+600413481647.dkr.ecr.us-west-2.amazonaws.com/queue-agent:20240314
+docker.io/library/hello-world:latest
+busybox:latest

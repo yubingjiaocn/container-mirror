@@ -1,9 +1,13 @@
+import base64
+import logging
 import os
 import re
+import shutil
+from pathlib import Path
+
 import boto3
-from botocore.exceptions import ClientError
 import docker
-import logging
+from botocore.exceptions import ClientError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -11,10 +15,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 # AWS ECR region and domain name
 ECR_REGION = 'ap-southeast-1'
 ECR_ACCOUNT = "600413481647"
-ECR_DOMAIN = f"{ECR_ACCOUNT}.dkr.ecr.{ECR_REGION}.amazonaws.com"
 
 ECR_REGION_CN = 'cn-northwest-1'
 ECR_ACCOUNT_CN = "834204282212"
+ECR_DOMAIN_CN = f"{ECR_ACCOUNT_CN}.dkr.ecr.{ECR_REGION_CN}.amazonaws.com.cn"
 
 # Domain name mapping
 DOMAIN_MAP = {
@@ -24,24 +28,26 @@ DOMAIN_MAP = {
     "asia.gcr.io": "gcr",
     "us.gcr.io": "gcr",
     "k8s.gcr.io": "gcr/google_containers",
-    "amazonaws.com": "amazonecr",
     "public.ecr.aws": "amazonecr",
     "docker.io": "dockerhub"
 }
 
+PWD = Path(os.path.dirname(os.path.realpath(__file__))).parent.absolute()
+
 # File paths
-IMAGES_DENIED_LIST = 'denied-images.txt'  # Replaced 'blacklist' with 'denied_list'
-IMAGES_IGNORE_LIST = 'ignore-images.txt'
-IMAGES_FILE_LIST = 'required-images.txt'
-IMAGES_MIRRORED_LIST = 'mirrored-images.txt'
-POLICY_FILE = 'policy.json'
+IMAGES_DENIED_LIST = f'{PWD}/mirror/denied-images.txt'  # Replaced 'blacklist' with 'denied_list'
+IMAGES_IGNORE_LIST = f'{PWD}/mirror/ignore-images.txt'
+IMAGES_FILE_LIST = f'{PWD}/mirror/required-images.txt'
+IMAGES_FILE_LIST_TEMPLATE= f'{PWD}/bin/required-images.txt.template'
+IMAGES_MIRRORED_LIST = f'{PWD}/mirror/mirrored-images.txt'
+IMAGES_FAILED_LIST = f'{PWD}/mirror/failed-images.txt'
+POLICY_FILE = f'{PWD}/mirror/policy.json'
 
 # AK/SK for AWS-CN region
 AWS_CN_AK = os.environ.get("ecr_ak", "")
 AWS_CN_SK = os.environ.get("ecr_sk", "")
 
 # AWS ECR client
-ecr_client = boto3.client('ecr', region_name=ECR_REGION)
 ecr_client_cn = boto3.client('ecr', region_name=ECR_REGION_CN,
                                  aws_access_key_id=AWS_CN_AK,
                                 aws_secret_access_key=AWS_CN_SK)
@@ -59,6 +65,12 @@ def replace_domain_name(uri: str) -> str:
     for domain, prefix in DOMAIN_MAP.items():
         if uri.startswith(domain):
             return uri.replace(domain, prefix, 1)
+
+    # special handling for ECR... I don't want to do this...
+    if is_ecr(uri):
+        repo = uri.split('/', 1)[1]
+        return repo
+
     return f"dockerhub/{uri}"
 
 def in_array(elem, arr) -> bool:
@@ -66,7 +78,7 @@ def in_array(elem, arr) -> bool:
     return elem in arr
 
 def is_ecr(img: str) -> bool:
-    """Define the pattern to match ECR image reference"""
+    """Helper: Check if the image match ECR image reference"""
     pattern = r'^(\d+)\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com/(.+)$'
     match = re.match(pattern, img)
     if match:
@@ -79,32 +91,39 @@ def login_ecr(img: str) -> bool:
     try:
         registry = img.split('/')[0]
         logging.info(f"Logging in to {registry}...")
-        # Login to ECR of Global region
-        ecr_auth = ecr_client.get_authorization_token(registryIds=[ECR_ACCOUNT])["authorizationData"][0]['authorizationToken']
+        # Get region from registry and create client
+        img_region = registry.split('.')[3]
+        ecr_client = boto3.client('ecr', region_name=img_region)
+
+        ecr_auth = ecr_client.get_authorization_token()
+        username, password = base64.b64decode(ecr_auth["authorizationData"][0]['authorizationToken']).decode().split(':')
 
         docker_client.login(
             registry=registry,
-            username="AWS",
-            password=ecr_auth
+            username=username,
+            password=password,
+            reauth=True
         )
+
         logging.info(f"Logged in to {registry}.")
         return True
 
     except Exception as e:
         logging.error(f"Error logging in to ECR: {e}")
 
-def login_ecr_cn(account: str, region: str):
+def login_ecr_cn():
     """Authenticate with AWS ECR CN for pushing image."""
     try:
-        ecr_auth_cn = ecr_client_cn.get_authorization_token(registryIds=[account])["authorizationData"][0]['authorizationToken']
-        ecr_domain_cn = f"{account}.dkr.ecr.{region}.amazonaws.com.cn"
-        logging.info(f"Logging in to {ecr_domain_cn}...")
+        ecr_auth_cn = ecr_client_cn.get_authorization_token()["authorizationData"][0]['authorizationToken']
+        username, password = base64.b64decode(ecr_auth_cn).decode().split(':')
+
+        logging.info(f"Logging in to {ECR_DOMAIN_CN}...")
         docker_client.login(
-            registry=ecr_domain_cn,
-            username="AWS",
-            password=ecr_auth_cn
+            registry=ECR_DOMAIN_CN,
+            username=username,
+            password=password
         )
-        logging.info(f"Logged in to {ecr_domain_cn}.")
+        logging.info(f"Logged in to {ECR_DOMAIN_CN}.")
         return True
     except Exception as e:
         logging.error(f"Error logging in to ECR: {e}")
@@ -137,22 +156,20 @@ def is_remote_image_exists(repo_name: str, tag: str, digest: str) -> bool:
 
 ## Main Functions
 
-def create_ecr_repo(repo_name: str, denied_list: list) -> str:
+def create_ecr_repo(repo_name: str) -> str:
     """Create an ECR repository in CN region if it doesn't exist and attach a public-read policy."""
-    if in_array(repo_name, denied_list):
-        logging.info(f"Repository: {repo_name} is on the denied list")
-        return None
-
     try:
         existing_repos = ecr_client_cn.describe_repositories()['repositories']
         existing_repo_names = [repo['repositoryName'] for repo in existing_repos]
         if repo_name in existing_repo_names:
             logging.info(f"Repository: {repo_name} already exists")
+            return f"{ECR_DOMAIN_CN}/{repo_name}"  # Return the URI of the existing repository
         else:
             logging.info(f"Creating repository: {repo_name}")
-            ecr_client_cn.create_repository(repositoryName=repo_name)
+            uri = ecr_client_cn.create_repository(repositoryName=repo_name)['repository']['repositoryUri']
             attach_policy(repo_name)
-        return repo_name
+            logging.info(f"Created repository with URI: {uri}")
+            return uri
     except ClientError as e:
         logging.error(f"Error creating ECR repository {repo_name}: {e}")
 
@@ -166,21 +183,23 @@ def attach_policy(repo_name: str):
     except (ClientError, FileNotFoundError) as e:
         logging.error(f"Error attaching policy to ECR repository {repo_name}: {e}")
 
-def delete_ecr_repo(repo_name: str, denied_list):  # Replaced 'blacklist' with 'denied_list'
-    """Delete an ECR repository in CN region if it's on the denied list."""
-    if in_array(repo_name, denied_list):
-        try:
-            existing_repos = ecr_client.describe_repositories()['repositories']
-            existing_repo_names = [repo['repositoryName'] for repo in existing_repos]
-            if repo_name in existing_repo_names:
-                logging.info(f"Deleting repository: {repo_name}")
-                ecr_client_cn.delete_repository(repositoryName=repo_name, force=True)
-                return True
-        except ClientError as e:
-            logging.error(f"Error deleting ECR repository {repo_name}: {e}")
+def delete_ecr_repo(repo_name: str):
+    """Delete an ECR repository in CN region"""
+    try:
+        existing_repos = ecr_client_cn.describe_repositories()['repositories']
+        existing_repo_names = [repo['repositoryName'] for repo in existing_repos]
+        if repo_name in existing_repo_names:
+            logging.info(f"Deleting repository: {repo_name}")
+            ecr_client_cn.delete_repository(repositoryName=repo_name, force=True)
+            return True
+        else:
+            logging.info(f"Repository: {repo_name} does not exist")
             return False
+    except ClientError as e:
+        logging.error(f"Error deleting ECR repository {repo_name}: {e}")
+        return False
 
-def pull_and_push(orig_img: str, target_registry: str) -> bool:  # Replaced 'blacklist' with 'denied_list'
+def pull_and_push(orig_img: str, target_repo: str) -> bool:  # Replaced 'blacklist' with 'denied_list'
     """Pull an image from a public repository and push it to ECR in CN region."""
     try:
         if is_ecr(orig_img):
@@ -190,17 +209,18 @@ def pull_and_push(orig_img: str, target_registry: str) -> bool:  # Replaced 'bla
         logging.info(f"Pulling image: {orig_img}")
         docker_client.images.pull(orig_img)
 
-        target_img = f"{target_registry}/{replace_domain_name(orig_img)}"
+        tag = orig_img.split(':')[-1]
+
+        target_img = f"{target_repo}:{tag}"
         logging.info(f"Tagging {orig_img} as {target_img}")
         docker_client.images.get(orig_img).tag(target_img)
 
-        digest = get_local_image_digest(target_img)
-        if digest and is_remote_image_exists(target_img.split('/')[1], target_img.split(':')[-1], digest):
-            logging.warning(f"Image {target_img} already exists, skipping push")
-        else:
-            logging.info(f"Pushing image: {target_img}")
-            docker_client.images.push(target_img)
+        logging.info(f"Pushing image: {target_img}")
+        docker_client.images.push(target_img)
+        logging.info(f"Pushed image: {target_img}")
+
         return True
+
     except docker.errors.APIError as e:
         logging.error(f"Error pulling or pushing image {orig_img}: {e}")
         return False
@@ -217,14 +237,14 @@ def main():
         with open(IMAGES_IGNORE_LIST, 'r') as f:
             ignore_images = [line.strip() for line in f if not line.startswith('#')]
         with open(IMAGES_FILE_LIST, 'r') as f:
-            images = [line.strip() for line in f if not line.startswith('#')]
+            images = [line.strip() for line in f if (not line.startswith('#')) & (len(line.strip()) != 0)]
 
         # Login to ECR
-        login_ecr()
+        login_ecr_cn()
 
         # Delete denied repositories
         for repo in denied_list:
-            delete_ecr_repo(replace_domain_name(repo), denied_list)
+            delete_ecr_repo(replace_domain_name(repo))
 
         # Start process new image
         for img in images:
@@ -238,15 +258,31 @@ def main():
                 logging.info(f"Ignoring image: {img}")
                 continue
 
-            img_cn = replace_domain_name(img)
-            if create_ecr_repo(img_cn) != None:
-                if (pull_and_push(img_cn, denied_list, ignore_images)):
+            # if the image has no tag, add latest tag to further process
+            if not ':' in img:
+                img = f"{img}:latest"
+
+            repo_cn = replace_domain_name(img.split(':')[0])
+            uri_cn = create_ecr_repo(repo_cn)
+
+            if uri_cn != None:
+                if (pull_and_push(img, uri_cn)):
                     proceed_images.append(img)
+                    logging.info(f"Complete mirroring of image: {img}")
                 else:
                     failed_images.append(img)
+                    logging.info(f"Failed mirroring of image: {img}")
 
         # Handle file actions
+        with open(IMAGES_MIRRORED_LIST, 'a+') as f:
+            for img in proceed_images:
+                f.write(f"{img}\n")
 
+        with open(IMAGES_FAILED_LIST, 'a+') as f:
+            for img in failed_images:
+                f.write(f"{img}\n")
+
+        shutil.copyfile(IMAGES_FILE_LIST_TEMPLATE, IMAGES_FILE_LIST)
 
     except FileNotFoundError as e:
         logging.error(f"Error: {e}")

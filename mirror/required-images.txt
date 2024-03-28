@@ -1,0 +1,13 @@
+# Steps to add images:
+# 1. Check mirrored-images.txt for mirrored image list.
+# 2. If you can't find your image in mirrored-images.txt, please add the reference of image below.
+# 3. Once the image mirror is proceed, the image reference will be automatically deleted.
+
+# Example
+# public.ecr.aws/ubuntu/ubuntu:latest
+# 602401143452.dkr.ecr.us-east-1.amazonaws.com/eks/coredns:v1.8.7-eksbuild.2
+# docker.io/library/hello-world
+# 此行以及以上内容请勿删除。新images在此行下添加。提交新的images时，请删除旧的images
+# === Image request starts here ===
+
+busybox
