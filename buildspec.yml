@@ -12,7 +12,7 @@ phases:
 
   pre_build:
     commands:
-      - pip install -r src/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+      - pip install -r src/requirements.txt
       - wget https://github.com/lework/skopeo-binary/releases/latest/download/skopeo-linux-amd64 && chmod +x skopeo-linux-amd64 && mv skopeo-linux-amd64 /usr/bin/skopeo
 
   build:
