@@ -86,14 +86,18 @@ def copy(src_img: str, dest_repo: str, dest_cred: str) -> bool:
 
         try:
             copy_cmd = ["skopeo", "copy", "--multi-arch", "all", src_param, dest_param, f"docker://{src_img}", f"docker://{dest_img}"]
-            result = subprocess.run(copy_cmd, capture_output=True, text=True, check=True)
+            process = subprocess.Popen(copy_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            for line in process.stdout:
+                logging.debug(line, end='')
+
+            return_code = process.wait()
+            if return_code != 0:
+                raise subprocess.CalledProcessError(return_code, copy_cmd)
         except CalledProcessError as e:
             logging.error(f"Error copying image {src_img}: {e}")
-            logging.error(f"{e.stdout}")
-            logging.error(f"{e.stderr}")
             return False
 
-        return result.returncode
+        return True
 
     except Exception as e:
         logging.error(f"Error copying image {src_img}: {e}")

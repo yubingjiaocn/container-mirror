@@ -34,10 +34,15 @@ IMAGES_MIRRORED_LIST = f'{PWD}/mirror/mirrored-images.txt'
 IMAGES_FAILED_LIST = f'{PWD}/mirror/failed-images.txt'
 POLICY_FILE = f'{PWD}/src/resources/policy.json'
 
+IMAGES_DAILY_LIST = f'{PWD}/mirror/required-images-daily.txt'
+
 CHARTS_LIST = f'{PWD}/mirror/required-charts.txt'
 CHARTS_LIST_TEMPLATE= f'{PWD}/src/resources/required-charts.txt.template'
 CHARTS_MIRRORED_LIST = f'{PWD}/mirror/mirrored-charts.txt'
 CHARTS_FAILED_LIST = f'{PWD}/mirror/failed-charts.txt'
+
+
+
 
 # AK/SK for AWS-CN region
 AWS_CN_AK = os.environ.get("ecr_ak", "")
